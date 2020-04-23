@@ -70,7 +70,7 @@ data = {"lastUpdate": dt_update}
 
 # contacts
 
-df_soudan = pd.read_csv(soudan_path).iloc[:-1]
+df_soudan = pd.read_csv(soudan_path)
 
 df_soudan["受付_年月日"] = pd.to_datetime(df_soudan["受付_年月日"])
 
