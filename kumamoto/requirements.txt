@@ -1,0 +1,5 @@
+pandas
+beautifulsoup4
+requests
+pycurl
+retry
