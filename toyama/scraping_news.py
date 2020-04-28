@@ -20,7 +20,7 @@ td = soup.find("table", width="730").find("td")
 m = re.search("【更新情報.+】", td.text)
 
 if m:
-    year, month, day = map(int, re.findall("(\d+)", m.group()))
+    year, month, day = map(int, re.findall(r"(\d+)", m.group()))
 
     dt_update = datetime.date(year, month, day).isoformat()
 
