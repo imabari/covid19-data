@@ -7,7 +7,6 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
-import pycurl
 from retry import retry
 
 # 設定
@@ -22,21 +21,15 @@ DATA_DIR = "data"
 @retry(tries=5, delay=5, backoff=3)
 def get_file(url, file_name, dir="."):
 
-    p = pathlib.Path(dir, file_name)
+    r = requests.get(url, headers={"User-Agent": USER_AGENT})
 
+    p = pathlib.Path(dir, file_name)
     p.parent.mkdir(parents=True, exist_ok=True)
 
-    with p.open(mode="wb") as f:
-
-        c = pycurl.Curl()
-        c.setopt(c.URL, url)
-        c.setopt(c.USERAGENT, USER_AGENT)
-        c.setopt(c.WRITEDATA, f)
-        c.perform()
-        c.close()
+    with p.open(mode='wb') as fw:
+        fw.write(r.content)
 
     return p
-
 
 # スクレイピング
 
