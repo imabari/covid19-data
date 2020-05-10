@@ -9,7 +9,7 @@ KANJA_URL = "http://www.pref.nara.jp/secure/227193/%E5%A5%88%E8%89%AF%E7%9C%8C_0
 
 SYUKEI_URL = "http://www.pref.nara.jp/secure/227221/%E5%A5%88%E8%89%AF%E7%9C%8C_02%E6%96%B0%E5%9E%8B%E3%82%B3%E3%83%AD%E3%83%8A%E3%82%A6%E3%82%A4%E3%83%AB%E3%82%B9%E6%84%9F%E6%9F%93%E8%80%85_%E6%82%A3%E8%80%85%E9%9B%86%E8%A8%88%E8%A1%A8.xlsx"
 
-DOWNLOAD_DIR = "data"
+DOWNLOAD_DIR = "download"
 DATA_DIR = "data"
 
 
@@ -128,5 +128,10 @@ data["sickbeds_summary"] = {
     "total": {"宿泊療養室数": int(main_sum["宿泊療養室数"]), "総病床数": int(main_sum["感染症対応病床数"]),},
 }
 
-with open("data.json", "w", encoding="utf-8") as fw:
+# json保存
+
+p = pathlib.Path(DATA_DIR, "data.json")
+p.parent.mkdir(parents=True, exist_ok=True)
+
+with p.open(mode="w", encoding="utf-8") as fw:
     json.dump(data, fw, ensure_ascii=False, indent=4)
