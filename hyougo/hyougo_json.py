@@ -17,7 +17,9 @@ KANJA_HTML = "https://web.pref.hyogo.lg.jp/kk03/corona_kanjyajyokyo.html"
 DOWNLOAD_DIR = "download"
 DATA_DIR = "data"
 
+
 # ダウンロード
+
 
 @retry(tries=5, delay=5, backoff=3)
 def get_file(url, dir="."):
@@ -79,19 +81,14 @@ CLUSTERS_SCHEMA = {
             "items": {
                 "type": "object",
                 "oneOf": [
-                    {
-                        "additionalProperties": False,
-                        "properties": {
-                            "日付": {"type": "string", "format": "date-time"},
-                        },
-                        "additionalProperties": {"anyOf": {"type": "integer"},},
-                    },
+                    {"properties": {"日付": {"type": "string", "format": "date-time"}},},
+                    {"additionalProperties": {"type": "integer"},},
                 ],
             },
-            "last_update": {"type": "string", "format": "date-time"},
         },
-        "required": ["data", "last_update"],
+        "last_update": {"type": "string", "format": "date-time"},
     },
+    "required": ["data", "last_update"],
 }
 
 CLUSTERS_SUMMARY_SCHEMA = {
@@ -306,13 +303,18 @@ def dumps_json(file_name, json_data, dir=DATA_DIR):
 
 
 # 最終更新日
+
 JST = datetime.timezone(datetime.timedelta(hours=+9))
 dt_now = datetime.datetime.now(JST)
 
 last_update = dt_now.replace(hour=0, minute=0, second=0, microsecond=0)
 last_update
 
-## pcr.xlsx
+
+dumps_json("last_update.json", {"last_update": last_update.isoformat()})
+
+
+# pcr.xlsx
 
 pcr_path = get_file(PCR_XLSX, DOWNLOAD_DIR)
 
@@ -329,16 +331,14 @@ df_pcr.rename(
     inplace=True,
 )
 
-df_pcr
-
 # inspections_summary
 
-df_insp = df_pcr.loc[:, ["地方衛生研究所等", "民間検査機関等", "陽性確認"]].copy()
+df_insp_sum = df_pcr.loc[:, ["地方衛生研究所等", "民間検査機関等"]].copy()
 
-labels = df_insp.index.map(lambda x: f"{x.month}/{x.day}")
+labels = df_insp_sum.index.map(lambda x: f"{x.month}/{x.day}")
 
 inspections_summary = {
-    "data": df_insp.to_dict(orient="list"),
+    "data": df_insp_sum.to_dict(orient="list"),
     "labels": labels.tolist(),
     "last_update": last_update.isoformat(),
 }
@@ -347,6 +347,9 @@ jsonschema.validate(inspections_summary, INSPECTIONS_SUMMARY_SCHEMA)
 
 dumps_json("inspections_summary.json", inspections_summary)
 
+# inspections
+
+df_insp = df_pcr.loc[:, ["地方衛生研究所等", "民間検査機関等", "陽性確認"]].copy()
 df_insp["判明日"] = df_insp.index.strftime("%Y-%m-%d")
 
 inspections = {
@@ -372,12 +375,11 @@ jsonschema.validate(patients_summary, PATIENTS_SUMMARY_SCHEMA)
 
 dumps_json("patients_summary.json", patients_summary)
 
-## kanjya.xlsx
+# kanjya.xlsx
 
 p = get_file(KANJA_HTML, DOWNLOAD_DIR)
 
 soup = BeautifulSoup(p.open(encoding="utf-8"), "html.parser")
-
 tag = soup.find("a", class_="icon_excel")
 
 link = urljoin(KANJA_HTML, tag.get("href"))
@@ -390,9 +392,7 @@ df_head.columns = ["".join(i).strip() for i in df_head.head(2).fillna("").T.valu
 df_tmp = df_head.iloc[2:, :].copy().reset_index(drop=True)
 
 df_kanja = df_tmp[df_tmp["番号"].notnull()].copy()
-
 df_kanja.dropna(how="all", axis=1, inplace=True)
-
 df_kanja.columns = df_kanja.columns.map(lambda s: s.replace("\n", ""))
 
 df_kanja["番号"] = df_kanja["番号"].astype(int)
@@ -406,9 +406,7 @@ df_kanja["発表日"] = df_kanja["発表日"].apply(
 )
 
 df_kanja["備考欄"] = df_kanja["備考欄"].str.replace("\n", "")
-
 df_kanja.set_index("番号", inplace=True)
-
 df_kanja.to_csv("kanja.tsv", sep="\t")
 
 # 陽性患者数（累計）
@@ -416,29 +414,28 @@ df_kanja.to_csv("kanja.tsv", sep="\t")
 len(df_kanja)
 
 # 陽性患者数（日別）
-
+"""
 df_pts = (
-    df_kanja["発表日"].value_counts().sort_index().asfreq("D", fill_value=0).reset_index()
+    df_kanja["発表日"]
+    .value_counts()
+    .sort_index()
+    .asfreq("D", fill_value=0)
+    .reset_index()
 )
 
 df_pts["日付"] = df_pts["index"].dt.strftime("%Y-%m-%d")
-
 df_pts.rename(columns={"発表日": "小計"}, inplace=True)
-
 df_pts.drop("index", axis=1, inplace=True)
-
-df_pts
-
 
 patients_summary = {
     "data": df_pts.to_dict(orient="records"),
     "last_update": last_update.strftime("%Y-%m-%d %H:%M"),
 }
 
+jsonschema.validate(patients_summary, PATIENTS_SUMMARY_SCHEMA)
 
-# jsonschema.validate(patients_summary, PATIENTS_SUMMARY_SCHEMA)
-
-# dumps_json("patients_summary.json", patients_summary)
+dumps_json("patients_summary.json", patients_summary)
+"""
 
 # 陽性患者情報
 
@@ -463,7 +460,6 @@ df_pt.rename(columns={"番号": "No", "備考欄": "備考"}, inplace=True)
 
 df_pt.drop("発表日", axis=1, inplace=True)
 
-df_pt
 
 patients = {
     "data": df_pt.to_dict(orient="records"),
@@ -542,42 +538,44 @@ dumps_json("clusters_summary.json", clusters_summary)
 
 df_clusters = df_kanja.loc[:, "認定こども園":"特定できず"].copy().fillna(0)
 
-df_clusters["発表日"] = df_kanja["発表日"]
+df_clusters[df_clusters != 0] = 1
 
-df_clusters.replace({"〇": 1, "○": 1}, inplace=True)
+df_clusters["発表日"] = df_kanja["発表日"]
 
 pv_clusters = df_clusters.pivot_table(index="発表日", aggfunc="sum").asfreq(
     "D", fill_value=0
 )
 
-pv_clusters["日付"] = pv_clusters.index.strftime("%Y-%m-%d")
+pv_clusters = df_clusters.pivot_table(index="発表日", aggfunc="sum").asfreq(
+    "D", fill_value=0
+)
+
+pv_clusters["日付"] = pv_clusters.index.map(
+    lambda d: pd.Timestamp(d, tz="Asia/Tokyo").isoformat()
+)
 
 clusters = {
     "data": pv_clusters.to_dict(orient="recodes"),
     "last_update": last_update.isoformat(),
 }
 
+jsonschema.validate(clusters, CLUSTERS_SCHEMA)
 dumps_json("clusters.json", clusters)
 
 # 重複者
 
 (df_kanja.loc[:, "認定こども園":].copy().notnull().sum(axis=1) > 1).sum()
 
-## yousei.xlsx
-
+# yousei.xlsx
 yousei_path = get_file(YOUSEI_XLSX, DOWNLOAD_DIR)
 
 df_yousei = pd.read_excel(yousei_path, index_col="発表年月日")
 
 df_yousei.columns = df_yousei.columns.map(lambda s: s.replace("（累計）", "").strip())
-
-df_yousei.index += pd.to_timedelta("1 days")
-
+# df_yousei.index += pd.to_timedelta("1 days")
 df_yousei.rename(columns={"中等症以下": "軽症・中等症", "陽性者数": "陽性患者数"}, inplace=True)
-
 df_yousei.drop("発表時間", axis=1, inplace=True)
 
-df_yousei
 
 d = df_yousei.iloc[-1].to_dict()
 
@@ -608,3 +606,20 @@ main_summary = {
 jsonschema.validate(main_summary, MAIN_SUMMARY_SCHEMA)
 
 dumps_json("main_summary.json", main_summary)
+
+# current_patients
+
+ser_cur = df_yousei["入院中"].reindex(df_pcr.index)
+
+df_current = pd.DataFrame({"小計": ser_cur.combine_first(df_pcr["陽性確認"].cumsum())}).diff().fillna(0).astype(int)
+df_current["日付"] = df_current.index.map(lambda d: pd.Timestamp(d, tz='Asia/Tokyo').isoformat())
+
+df_cur_pts = df_current.loc[:, ["日付", "小計"]].copy()
+
+current_patients = {
+    "data": df_cur_pts.to_dict(orient="records"),
+    "last_update": last_update.isoformat(),
+}
+
+jsonschema.validate(current_patients, PATIENTS_SUMMARY_SCHEMA)
+dumps_json("current_patients.json", current_patients)
