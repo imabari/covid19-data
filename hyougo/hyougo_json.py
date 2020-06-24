@@ -17,7 +17,6 @@ KANJA_HTML = "https://web.pref.hyogo.lg.jp/kk03/corona_kanjyajyokyo.html"
 DOWNLOAD_DIR = "download"
 DATA_DIR = "data"
 
-
 # ダウンロード
 
 
@@ -33,7 +32,6 @@ def get_file(url, dir="."):
         fw.write(r.content)
 
     return p
-
 
 # SCHEMA
 
@@ -118,7 +116,10 @@ INSPECTIONS_SCHEMA = {
                 "properties": {
                     "判明日": {"type": "string", "format": "date"},
                     "地方衛生研究所等": {"type": "integer"},
-                    "民間検査機関等": {"type": "integer"},
+                    "民間検査機関等": {
+                        "type": "object",
+                        "additionalProperties": {"type": "integer"},
+                    },
                     "陽性確認": {"type": "integer"},
                 },
                 "required": ["判明日", "地方衛生研究所等", "民間検査機関等", "陽性確認"],
@@ -301,7 +302,6 @@ def dumps_json(file_name, json_data, dir=DATA_DIR):
     with p.open(mode="w") as fw:
         json.dump(json_data, fw, ensure_ascii=False, indent=4)
 
-
 # 最終更新日
 
 JST = datetime.timezone(datetime.timedelta(hours=+9))
@@ -313,23 +313,26 @@ last_update
 
 dumps_json("last_update.json", {"last_update": last_update.isoformat()})
 
-
 # pcr.xlsx
 
 pcr_path = get_file(PCR_XLSX, DOWNLOAD_DIR)
 
 df_pcr = pd.read_excel(pcr_path, index_col="年月日").fillna(0).astype(int)
 
-df_pcr["日付"] = df_pcr.index.map(lambda d: pd.Timestamp(d, tz="Asia/Tokyo").isoformat())
-
 df_pcr.rename(
     columns={
+        "検査件数（合計）": "合計",
         "うち地方衛生研究所等によるPCR検査件数": "地方衛生研究所等",
-        "うち民間検査機関等によるPCR検査件数": "民間検査機関等",
+        "うち民間検査機関等によるPCR検査件数": "民間検査機関等_PCR検査",
+        "うち民間検査機関等による抗原検査件数": "民間検査機関等_抗原検査",
         "陽性件数": "陽性確認",
     },
     inplace=True,
 )
+
+df_pcr["民間検査機関等"] = df_pcr["民間検査機関等_PCR検査"] + df_pcr["民間検査機関等_抗原検査"]
+
+df_pcr["日付"] = df_pcr.index.map(lambda d: pd.Timestamp(d, tz='Asia/Tokyo').isoformat())
 
 # inspections_summary
 
@@ -344,16 +347,27 @@ inspections_summary = {
 }
 
 jsonschema.validate(inspections_summary, INSPECTIONS_SUMMARY_SCHEMA)
-
 dumps_json("inspections_summary.json", inspections_summary)
 
 # inspections
 
-df_insp = df_pcr.loc[:, ["地方衛生研究所等", "民間検査機関等", "陽性確認"]].copy()
+df_insp = df_pcr.loc[:, ["地方衛生研究所等", "民間検査機関等_PCR検査", "民間検査機関等_抗原検査", "陽性確認"]].copy()
 df_insp["判明日"] = df_insp.index.strftime("%Y-%m-%d")
 
+df_insp.sort_index(inplace=True)
+
+insp_dict = [
+    {
+        "判明日": row["判明日"],
+        "地方衛生研究所等": row["地方衛生研究所等"],
+        "民間検査機関等": {"PCR検査": row["民間検査機関等_PCR検査"], "抗原検査": row["民間検査機関等_抗原検査"]},
+        "陽性確認": row["陽性確認"],
+    }
+    for _, row in df_insp.iterrows()
+]
+
 inspections = {
-    "data": df_insp.to_dict(orient="recode"),
+    "data": insp_dict,
     "last_update": last_update.isoformat(),
 }
 
@@ -372,7 +386,6 @@ patients_summary = {
 }
 
 jsonschema.validate(patients_summary, PATIENTS_SUMMARY_SCHEMA)
-
 dumps_json("patients_summary.json", patients_summary)
 
 # kanjya.xlsx
@@ -433,7 +446,6 @@ patients_summary = {
 }
 
 jsonschema.validate(patients_summary, PATIENTS_SUMMARY_SCHEMA)
-
 dumps_json("patients_summary.json", patients_summary)
 """
 
@@ -467,7 +479,6 @@ patients = {
 }
 
 jsonschema.validate(patients, PATIENTS_SCHEMA)
-
 dumps_json("patients.json", patients)
 
 # 年代集計
@@ -496,7 +507,6 @@ age = {
 }
 
 jsonschema.validate(age, AGE_SCHEMA)
-
 dumps_json("age.json", age)
 
 df_ages = pd.crosstab(df_kanja["発表日"], df_kanja["年代"]).reindex(
@@ -518,7 +528,6 @@ age_summary = {
 }
 
 jsonschema.validate(age_summary, AGE_SUMMARY_SCHEMA)
-
 dumps_json("age_summary.json", age_summary)
 
 # クラスタ概要
@@ -531,7 +540,6 @@ clusters_summary = {
 }
 
 jsonschema.validate(clusters_summary, CLUSTERS_SUMMARY_SCHEMA)
-
 dumps_json("clusters_summary.json", clusters_summary)
 
 # クラスタ
@@ -567,6 +575,7 @@ dumps_json("clusters.json", clusters)
 (df_kanja.loc[:, "認定こども園":].copy().notnull().sum(axis=1) > 1).sum()
 
 # yousei.xlsx
+
 yousei_path = get_file(YOUSEI_XLSX, DOWNLOAD_DIR)
 
 df_yousei = pd.read_excel(yousei_path, index_col="発表年月日")
@@ -604,7 +613,6 @@ main_summary = {
 }
 
 jsonschema.validate(main_summary, MAIN_SUMMARY_SCHEMA)
-
 dumps_json("main_summary.json", main_summary)
 
 # current_patients
