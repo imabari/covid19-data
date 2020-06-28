@@ -513,11 +513,13 @@ df_ages = pd.crosstab(df_kanja["発表日"], df_kanja["年代"]).reindex(
     age_list, axis=1, fill_value=0
 )
 
+if df_pcr.index[-1] not in df_ages.index:
+    df_ages.loc[df_pcr.index[-1]] = 0
+
 df_ages = df_ages.astype(int)
+df_ages.sort_index(inplace=True)
 
 df_agesum = df_ages.asfreq("D", fill_value=0)
-
-df_agesum
 
 labels = df_agesum.index.map(lambda d: f"{d.month}/{d.day}")
 
@@ -550,13 +552,14 @@ df_clusters[df_clusters != 0] = 1
 
 df_clusters["発表日"] = df_kanja["発表日"]
 
-pv_clusters = df_clusters.pivot_table(index="発表日", aggfunc="sum").asfreq(
-    "D", fill_value=0
-)
+pv_clusters = df_clusters.pivot_table(index="発表日", aggfunc="sum")
 
-pv_clusters = df_clusters.pivot_table(index="発表日", aggfunc="sum").asfreq(
-    "D", fill_value=0
-)
+if df_pcr.index[-1] not in pv_clusters.index:
+    pv_clusters.loc[df_pcr.index[-1]] = 0
+
+pv_clusters.sort_index(inplace=True)
+
+pv_clusters = pv_clusters.asfreq("D", fill_value=0)
 
 pv_clusters["日付"] = pv_clusters.index.map(
     lambda d: pd.Timestamp(d, tz="Asia/Tokyo").isoformat()
