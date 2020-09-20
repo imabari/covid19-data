@@ -143,6 +143,8 @@ def fetch_kanja(url):
         inplace=True,
     )
 
+    df.dropna(thresh=4, inplace=True)
+
     df["備考"] = df["備考"].fillna("").astype(str)
 
     df["年代"] = df["年代"].fillna("").astype(str)
